@@ -11,6 +11,7 @@
 #' @param gene_cell_filtering Filtering on genes based on expression across all cells
 #' @param ncell_filtering Filtering on cells based on the number of genes expressed
 #' @param span smoothing parameter for LOESS curve
+#' @param cores Number of cores for parallel processing (default is 1)
 #'
 #' @return A result table contains parameter estimation
 #' @export
@@ -22,9 +23,10 @@
 #' mat=IPF_example$mat
 #' meta=IPF_example$meta
 #' sequencing_depth=IPF_example$meta$sequencing_depth
-#' result=iDESC(mat,meta,subject_var="subject",group_var="disease",norm_opt="User",user_sf = sequencing_depth,span = 0.7)
+#' result=iDESC(mat,meta,subject_var="subject",group_var="disease",norm_opt="User",user_sf = sequencing_depth,span = 0.7,cores = 4)
+
 iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor","User","None"),user_sf=NULL,
-                sub_cell_filtering=5,gene_sub_filtering=0,gene_cell_filtering=0.05,ncell_filtering=1,span=0.05){
+                sub_cell_filtering=5,gene_sub_filtering=0,gene_cell_filtering=0.05,ncell_filtering=1,span=0.05,cores=1){
   if(!is.null(user_sf)){
     if(is.null(names(user_sf))){names(user_sf)<-colnames(mat)}else{user_sf<-user_sf[colnames(mat)]}
   }
@@ -38,7 +40,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   predict_pi<-zp_prediction(mat,norm_factor,span)
   stopifnot("LOESS: zero-width neighborhood. make span bigger"=sum(is.na(predict_pi))==0)
 
-  res_tb<-Reduce(plyr::rbind.fill,lapply(1:nrow(mat),function(g){
+  res_tb<-Reduce(plyr::rbind.fill,parallel::mclapply(1:nrow(mat),function(g){
     gene<-mat[g,]
     predict_pi_offset<-predict_pi[g]
     tmp.df<-data.frame(y=gene,norm_sf=norm_factor,predict_pi_offset=predict_pi_offset,ind_zero=1*(gene==0),group=group,sub=as.numeric(factor(subject)))
@@ -56,12 +58,8 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     }
 
     data.frame(t(res1))
-  }))
+  },mc.cores=cores))
   rownames(res_tb)<-rownames(mat)
   res_tb<-res_tb[which(!is.na(res_tb[,1])&!is.na(res_tb[,2])&!is.na(res_tb[,7])),]
   return(res_tb)
 }
-
-
-
-

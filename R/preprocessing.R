@@ -8,12 +8,12 @@
 #' @param gene_sub_filtering Filtering on genes based on expression in each subject
 #' @param gene_cell_filtering Filtering on genes based on expression across all cells
 #' @param ncell_filtering Filtering on cells based on the number of genes expressed
+#' @param cores Number of cores for parallel processing (default is 1)
 #'
 #' @return A list of processed count matrix and data frame
 #' @export
-#'
-#' @examples
-preprocessing<-function(mat,meta,subject_var,group_var,sub_cell_filtering,gene_sub_filtering,gene_cell_filtering,ncell_filtering){
+
+preprocessing<-function(mat,meta,subject_var,group_var,sub_cell_filtering,gene_sub_filtering,gene_cell_filtering,ncell_filtering,cores=1){
   #meta is a df with rownames=cell_barcode, columns includes:subject,group
   #sub_cell_filtering is an integer
   stopifnot("Gene filtering should be based on an indicated proportion"=(gene_sub_filtering>=0&gene_sub_filtering<=1))
@@ -36,15 +36,19 @@ preprocessing<-function(mat,meta,subject_var,group_var,sub_cell_filtering,gene_s
     print('"Group" has more than 3 levels and was treated as continuous.')
     group_sub_list<-list(subject_name)
   }else{
-    group_sub_list<-lapply(1:length(levels(factor(meta[,group_var]))),function(i){
+    group_sub_list<-parallel::mclapply(1:length(levels(factor(meta[,group_var]))),function(i){
       unique(meta[which(meta[,group_var]==levels(factor(meta[,group_var]))[i]),subject_var])
-    })
+    },mc.cores=cores)
   }
 
   #sub_prop is a gene*sub matrix
-  sub_prop<-sapply(remain_sub,function(sub){
+  sub_prop_list<-parallel::mclapply(remain_sub,function(sub){
     rowMeans(mat[,barcode_orig[which(meta[,subject_var]==sub)]]!=0,na.rm=T)
-  })
+  },mc.cores=cores)
+
+  #list to matrix
+  sub_prop <- do.call(cbind, sub_prop_list)
+  colnames(sub_prop) <- remain_sub
 
   remain_gene<-rownames(mat)[which(rowSums(sapply(group_sub_list,function(sub_list){
     rowSums(sub_prop[,as.character(sub_list)]>=gene_cell_filtering,na.rm=T)>=(gene_sub_filtering*length(sub_list))

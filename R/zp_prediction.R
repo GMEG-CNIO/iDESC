@@ -6,8 +6,7 @@
 #'
 #' @return A vector of LOESS predicted dropout rate
 #' @export
-#'
-#' @examples
+
 zp_prediction<-function(mat,norm_factor,span){
   if(class(mat)[1]!="dgCMatrix"){
     mat<-Matrix::Matrix(mat)
@@ -35,6 +34,3 @@ zp_prediction<-function(mat,norm_factor,span){
 
   return(smoothed05)
 }
-
-
-
