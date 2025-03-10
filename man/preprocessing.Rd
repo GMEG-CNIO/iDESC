@@ -12,7 +12,8 @@ preprocessing(
   sub_cell_filtering,
   gene_sub_filtering,
   gene_cell_filtering,
-  ncell_filtering
+  ncell_filtering,
+  cores = 1
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ preprocessing(
 \item{gene_cell_filtering}{Filtering on genes based on expression across all cells}
 
 \item{ncell_filtering}{Filtering on cells based on the number of genes expressed}
+
+\item{cores}{Number of cores for parallel processing (default is 1)}
 }
 \value{
 A list of processed count matrix and data frame

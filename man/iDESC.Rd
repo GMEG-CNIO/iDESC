@@ -15,7 +15,8 @@ iDESC(
   gene_sub_filtering = 0,
   gene_cell_filtering = 0.05,
   ncell_filtering = 1,
-  span = 0.05
+  span = 0.05,
+  cores = 1
 )
 }
 \arguments{
@@ -40,6 +41,8 @@ iDESC(
 \item{ncell_filtering}{Filtering on cells based on the number of genes expressed}
 
 \item{span}{smoothing parameter for LOESS curve}
+
+\item{cores}{Number of cores for parallel processing (default is 1)}
 }
 \value{
 A result table contains parameter estimation
@@ -54,5 +57,5 @@ data(IPF_example)
 mat=IPF_example$mat
 meta=IPF_example$meta
 sequencing_depth=IPF_example$meta$sequencing_depth
-result=iDESC(mat,meta,subject_var="subject",group_var="disease",norm_opt="User",user_sf = sequencing_depth,span = 0.7)
+result=iDESC(mat,meta,subject_var="subject",group_var="disease",norm_opt="User",user_sf = sequencing_depth,span = 0.7,cores = 4)
 }
