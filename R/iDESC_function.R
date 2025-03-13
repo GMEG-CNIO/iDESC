@@ -64,7 +64,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
 
   # Issue warning if genes are excluded
   if (length(genes_to_exclude) > 0) {
-    warning("The following genes were excluded because they were expressed in only one group: ",
+    message("The following genes were excluded because they were expressed in only one group: ",
             paste(genes_to_exclude, collapse = ", "))
   }
 
