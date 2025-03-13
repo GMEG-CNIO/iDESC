@@ -63,11 +63,10 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   total_cells_per_group <- as.data.frame(as.list(table(group)))
 
   # Identify and exclude genes expressed in only one group
-  genes_to_exclude <- rownames(gene_group_summary_df)[rowSums(gene_group_summary_df > 0) < 2]
+  genes_to_exclude <- rownames(gene_group_expressed_df)[rowSums(gene_group_expressed_df > 0) < 2]
 
   # Filter summaries for problematic genes
   problematic_genes_expressed <- gene_group_expressed_df[genes_to_exclude, , drop = FALSE]
-  problematic_genes_total <- gene_group_total_df[genes_to_exclude, , drop = FALSE]
 
   # Issue warning if genes are excluded
   if (length(genes_to_exclude) > 0) {
