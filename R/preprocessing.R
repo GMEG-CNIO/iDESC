@@ -46,7 +46,7 @@ preprocessing<-function(mat,meta,subject_var,group_var,sub_cell_filtering,gene_s
     rowMeans(mat[,barcode_orig[which(meta[,subject_var]==sub)]]!=0,na.rm=T)
   },mc.cores=cores)
 
-  #list to matrix
+  # list to matrix
   sub_prop <- do.call(cbind, sub_prop_list)
   colnames(sub_prop) <- remain_sub
 

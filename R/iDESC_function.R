@@ -12,9 +12,12 @@
 #' @param ncell_filtering Filtering on cells based on the number of genes expressed
 #' @param span smoothing parameter for LOESS curve
 #' @param cores Number of cores for parallel processing (default is 1)
-#' @param loess_control Optional. If set to "control", applies `loess.control(surface = "direct")`
-#' to prevent memory issues with large datasets. Use when you encounter warnings like
-#' "k-d tree limited by memory".
+#' @param loess_control Optional. If set to "control", the LOESS smoothing function will use
+#' `loess.control(surface = "direct")`. This setting is recommended when working with sparse or
+#' zero-heavy datasets, where the default LOESS method may struggle to define neighborhoods for
+#' smoothing. Using "direct" computation ensures more stable and accurate smoothing but may be
+#' slower. Activate this option if you encounter warnings like "k-d tree limited by memory" or
+#' if the LOESS fit appears unstable.
 #'
 #' @return A list containing:
 #' \itemize{
@@ -48,19 +51,28 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   predict_pi<-zp_prediction(mat,norm_factor,span,loess_control)
   stopifnot("LOESS: zero-width neighborhood. make span bigger"=sum(is.na(predict_pi))==0)
 
-  # Detect and summarize gene expression across groups
-  gene_group_summary <- sapply(rownames(mat), function(gene_name) {
+  # Summary of expressed cells
+  gene_group_expressed <- sapply(rownames(mat), function(gene_name) {
     gene_values <- mat[gene_name, ]
     tapply(gene_values > 0, group, sum)
   })
-  gene_group_summary_df <- as.data.frame(t(gene_group_summary))
-  colnames(gene_group_summary_df) <- levels(factor(group))
+  gene_group_expressed_df <- as.data.frame(t(gene_group_expressed))
+  colnames(gene_group_expressed_df) <- levels(factor(group))
+
+  # Summary of total cells
+  total_cells_per_group <- table(group)
+  gene_group_total_df <- as.data.frame(matrix(rep(total_cells_per_group, each = nrow(gene_group_expressed_df)),
+                                              ncol = length(total_cells_per_group),
+                                              byrow = FALSE))
+  rownames(gene_group_total_df) <- rownames(gene_group_expressed_df)
+  colnames(gene_group_total_df) <- names(total_cells_per_group)
 
   # Identify and exclude genes expressed in only one group
   genes_to_exclude <- rownames(gene_group_summary_df)[rowSums(gene_group_summary_df > 0) < 2]
 
-  # Filter the summary for these problematic genes
-  problematic_genes_summary <- gene_group_summary_df[genes_to_exclude, , drop = FALSE]
+  # Filter summaries for problematic genes
+  problematic_genes_expressed <- gene_group_expressed_df[genes_to_exclude, , drop = FALSE]
+  problematic_genes_total <- gene_group_total_df[genes_to_exclude, , drop = FALSE]
 
   # Issue warning if genes are excluded
   if (length(genes_to_exclude) > 0) {
@@ -94,6 +106,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   res_tb<-res_tb[which(!is.na(res_tb[,1])&!is.na(res_tb[,2])&!is.na(res_tb[,7])),]
   return(list(
     model_results = res_tb,
-    problematic_genes = problematic_genes_summary
+    problematic_genes_cells_expressed = problematic_genes_expressed,
+    problematic_genes_cells_total = problematic_genes_total
   ))
 }
