@@ -3,11 +3,14 @@
 #' @param mat  Count matrix
 #' @param norm_factor normalization factors from function: "normalization_factors"
 #' @param span smoothing parameter
+#' @param loess_control Optional. If set to "control", applies `loess.control(surface = "direct")`
+#' to prevent memory issues with large datasets. Use when you encounter warnings like
+#' "k-d tree limited by memory".
 #'
 #' @return A vector of LOESS predicted dropout rate
 #' @export
 
-zp_prediction<-function(mat,norm_factor,span){
+zp_prediction<-function(mat,norm_factor,span,loess_control){
   if(class(mat)[1]!="dgCMatrix"){
     mat<-Matrix::Matrix(mat)
   }
@@ -26,7 +29,20 @@ zp_prediction<-function(mat,norm_factor,span){
     norm_gene_all<-Matrix::rowMeans(tmp_seurat@assays$RNA@data)
   }
   zp_plot=data.frame(zp=prop_zero,log_mu=log(norm_gene_all))
-  loessMod05 <- stats::loess(zp ~ log_mu, data=zp_plot, span=span)
+  if (loess_control == "control") {
+    loessMod05 <- stats::loess(
+      zp ~ log_mu,
+      data = zp_plot,
+      span = span,
+      control = loess.control(surface = "direct")
+    )
+  } else {
+    loessMod05 <- stats::loess(
+      zp ~ log_mu,
+      data = zp_plot,
+      span = span
+    )
+  }
   smoothed05 <- stats::predict(loessMod05)
   names(smoothed05)<-gl
   plot(zp~log_mu,data=zp_plot,ylab="Proportion of zeros",xlab="log(avg.norm.expression)",main=paste0("span=",span),cex=0.3)
