@@ -59,13 +59,8 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   gene_group_expressed_df <- as.data.frame(t(gene_group_expressed))
   colnames(gene_group_expressed_df) <- levels(factor(group))
 
-  # Summary of total cells
-  total_cells_per_group <- table(group)
-  gene_group_total_df <- as.data.frame(matrix(rep(total_cells_per_group, each = nrow(gene_group_expressed_df)),
-                                              ncol = length(total_cells_per_group),
-                                              byrow = FALSE))
-  rownames(gene_group_total_df) <- rownames(gene_group_expressed_df)
-  colnames(gene_group_total_df) <- names(total_cells_per_group)
+  # Total cells per group (only once)
+  total_cells_per_group <- as.data.frame(as.list(table(group)))
 
   # Identify and exclude genes expressed in only one group
   genes_to_exclude <- rownames(gene_group_summary_df)[rowSums(gene_group_summary_df > 0) < 2]
@@ -107,6 +102,6 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   return(list(
     model_results = res_tb,
     problematic_genes_cells_expressed = problematic_genes_expressed,
-    problematic_genes_cells_total = problematic_genes_total
+    total_cells = total_cells_per_group
   ))
 }
