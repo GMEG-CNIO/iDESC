@@ -61,6 +61,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
 
   # Total cells per group (only once)
   total_cells_per_group <- as.data.frame(as.list(table(group)))
+  rownames(total_cells_per_group) <- "Total_cells"
 
   # Identify and exclude genes expressed in only one group
   genes_to_exclude <- rownames(gene_group_expressed_df)[rowSums(gene_group_expressed_df > 0) < 2]
