@@ -11,13 +11,14 @@
 #' @param gene_cell_filtering Filtering on genes based on expression across all cells
 #' @param ncell_filtering Filtering on cells based on the number of genes expressed
 #' @param span smoothing parameter for LOESS curve
-#' @param cores Number of cores for parallel processing (default is 1)
 #' @param loess_control Optional. If set to "control", the LOESS smoothing function will use
 #' `loess.control(surface = "direct")`. This setting is recommended when working with sparse or
 #' zero-heavy datasets, where the default LOESS method may struggle to define neighborhoods for
 #' smoothing. Using "direct" computation ensures more stable and accurate smoothing but may be
 #' slower. Activate this option if you encounter warnings like "k-d tree limited by memory" or
 #' if the LOESS fit appears unstable.
+#' @param covariates Optional. A vector of covariates to include in the model.
+#' @param cores Number of cores for parallel processing (default is 1)
 #'
 #' @return A list containing:
 #' \itemize{
@@ -37,7 +38,7 @@
 
 iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor","User","None"),user_sf=NULL,
                 sub_cell_filtering=5,gene_sub_filtering=0,gene_cell_filtering=0.05,ncell_filtering=1,span=0.05,loess_control="",
-                cores=1){
+                covariates=NULL,cores=1){
   if(!is.null(user_sf)){
     if(is.null(names(user_sf))){names(user_sf)<-colnames(mat)}else{user_sf<-user_sf[colnames(mat)]}
   }
@@ -83,7 +84,16 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     predict_pi_offset <- predict_pi[rownames(filtered_mat)[g]]
     tmp.df<-data.frame(y=gene,norm_sf=norm_factor,predict_pi_offset=predict_pi_offset,ind_zero=1*(gene==0),group=group,sub=as.numeric(factor(subject)))
 
-    f1<-try(glmmTMB::glmmTMB(y ~ group + offset(log(norm_sf)) + (1 | sub), data = tmp.df, family = glmmTMB::nbinom2, zi = ~ offset(predict_pi_offset)-1+ind_zero+(1 | sub)))
+    if (!is.null(covariates)) {
+      tmp.df[, covariates] <- meta[, covariates]
+    }
+
+    # Create formula for the model
+    fixed_effects <- c("group", covariates)
+    fixed_formula <- as.formula(paste("y ~", paste(fixed_effects, collapse = " + "), "+ offset(log(norm_sf)) + (1 | sub)"))
+    zi_formula <- ~ offset(predict_pi_offset) - 1 + ind_zero + (1 | sub)
+
+    f1<-try(glmmTMB::glmmTMB(formula = fixed_formula, data = tmp.df, family = glmmTMB::nbinom2, ziformula = zi_formula))
 
     res1<-try(c(summary(f1)$coefficients$cond[,"Estimate"],1/summary(f1)$sigma,exp(f1$fit$par["theta"])^2,exp(f1$fit$par["thetazi"])^2,
                 summary(f1)$coefficients$zi[1,"Estimate"],summary(f1)$coefficients$cond[-1,"Pr(>|z|)"],summary(f1)$AICtab["deviance"]))
