@@ -112,7 +112,9 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     "Deviance"
   )
 
-  res_tb<-Reduce(plyr::rbind.fill,parallel::mclapply(1:nrow(filtered_mat),function(g){
+  convergence_failed_genes <- character(0)
+
+  res_tb<-parallel::mclapply(1:nrow(filtered_mat),function(g){
     gene_name <- rownames(filtered_mat)[g]
     gene<-filtered_mat[g,]
     predict_pi_offset <- predict_pi[rownames(filtered_mat)[g]]
@@ -141,46 +143,66 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
         )
       },
       error = function(e) {
+        convergence_failed_genes <- c(convergence_failed_genes, gene_name)
         message(paste0("Model convergence failed for gene: ", gene_name))
         return(NULL)
       }
     )
 
     # Check convergence
-    if (is.null(f1)) {
-      dummy_model <- lm(fixed_formula, data = tmp.df) # dummy model to get names
-      est_names <- names(coef(dummy_model))[-1]
-      all_names <- c(
-        "Alpha",
-        paste0("Beta_", est_names),
-        "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
-        paste0("Pval_Beta_", est_names),
-        "Deviance"
-      )
-      res1 <- setNames(rep(NA, length(expected_colnames)), expected_colnames)
-    } else {
-      # If model fit successful, extract values
-      est <- summary(f1)$coefficients$cond[, "Estimate"]
-      pval <- summary(f1)$coefficients$cond[-1, "Pr(>|z|)"]
-      if (is.null(pval)) {
-        pval_names <- names(est)[-1]
-        pval <- setNames(rep(NA, length(pval_names)), pval_names)
-      }
-      res1 <- c(est, 1 / summary(f1)$sigma, exp(f1$fit$par["theta"])^2, exp(f1$fit$par["thetazi"])^2,
-                summary(f1)$coefficients$zi[1, "Estimate"], pval, summary(f1)$AICtab["deviance"])
-      names(res1) <- c("Alpha",
-                       paste0("Beta_", names(est)[-1]),
-                       "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
-                       paste0("Pval_Beta_", names(pval)),
-                       "Deviance")
-    }
+    if (is.null(f1)) return(NULL)
 
-    data.frame(t(res1))
-  },mc.cores=cores))
-  rownames(res_tb)<-rownames(filtered_mat)
+    est <- summary(f1)$coefficients$cond[, "Estimate"]
+    pval <- summary(f1)$coefficients$cond[-1, "Pr(>|z|)"]
+    if (is.null(pval)) {
+      pval_names <- names(est)[-1]
+      pval <- setNames(rep(NA, length(pval_names)), pval_names)
+    }
+    res1 <- c(est, 1 / summary(f1)$sigma, exp(f1$fit$par["theta"])^2, exp(f1$fit$par["thetazi"])^2,
+              summary(f1)$coefficients$zi[1, "Estimate"], pval, summary(f1)$AICtab["deviance"])
+    names(res1) <- c("Alpha",
+                      paste0("Beta_", names(est)[-1]),
+                      "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
+                      paste0("Pval_Beta_", names(pval)),
+                      "Deviance")
+
+    df <- data.frame(t(res1))
+    rownames(df) <- gene_name
+    return(df)
+  },mc.cores=cores)
+
+  res_tb <- plyr::rbind.fill(res_tb)
+
+  # Add convergence-failure genes to the problematic table
+  if (length(convergence_failed_genes) > 0) {
+    convergence_failed_expr <- gene_group_expressed_df[convergence_failed_genes, , drop = FALSE]
+
+    convergence_failed_expr$Reason <- "model_convergence"
+    convergence_failed_expr$Gene <- rownames(convergence_failed_expr)
+
+    convergence_failed_df <- convergence_failed_expr
+  } else {
+    convergence_failed_df <- NULL
+  }
+
+  # Combine both problematic gene sets into one
+  if (nrow(problematic_genes_expressed) > 0) {
+    problematic_expr <- problematic_genes_expressed
+    problematic_expr$Reason <- "one_group"
+    problematic_expr$Gene <- rownames(problematic_expr)
+  } else {
+    problematic_expr <- NULL
+  }
+
+  problematic_combined <- plyr::rbind.fill(problematic_expr, convergence_failed_df)
+  if (!is.null(problematic_combined)) {
+    problematic_combined <- problematic_combined[order(problematic_combined$Gene), ]
+    problematic_combined <- problematic_combined[, !(colnames(problematic_combined) %in% "Gene")]
+  }
+
   return(list(
     model_results = res_tb,
-    problematic_genes_cells_expressed = problematic_genes_expressed,
+    problematic_genes_cells_expressed = problematic_combined,
     total_cells = total_cells_per_group
   ))
 }
