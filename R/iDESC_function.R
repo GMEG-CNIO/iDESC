@@ -79,7 +79,41 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   # Filter out problematic genes from the main matrix
   filtered_mat <- mat[!rownames(mat) %in% genes_to_exclude, ]
 
+  # Prepare colnames for the results table when glmmTMB fails
+
+  # Helper to get levels if factor, or just keep the variable name if numeric
+  get_coef_names <- function(var_name, meta_df, prefix = "Beta_") {
+    var_data <- meta_df[[var_name]]
+    if (is.factor(var_data) || is.character(var_data)) {
+      levels_var <- levels(factor(var_data))
+      if (length(levels_var) <= 1) return(NULL)
+      return(paste0(prefix, var_name, levels_var[-1]))  # drop reference level
+    } else {
+      return(paste0(prefix, var_name))
+    }
+  }
+
+  # Get coefficients and p-values for group
+  group_coef_names <- get_coef_names(group_var, meta, prefix = "Beta_")
+  group_pval_names <- get_coef_names(group_var, meta, prefix = "Pval_Beta_")
+
+  # For covariates
+  covar_coef_names <- unlist(lapply(covariates, get_coef_names, meta_df = meta, prefix = "Beta_"))
+  covar_pval_names <- unlist(lapply(covariates, get_coef_names, meta_df = meta, prefix = "Pval_Beta_"))
+
+  # Combine all expected column names
+  expected_colnames <- c(
+    "Alpha",
+    group_coef_names,
+    covar_coef_names,
+    "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
+    group_pval_names,
+    covar_pval_names,
+    "Deviance"
+  )
+
   res_tb<-Reduce(plyr::rbind.fill,parallel::mclapply(1:nrow(filtered_mat),function(g){
+    gene_name <- rownames(filtered_mat)[g]
     gene<-filtered_mat[g,]
     predict_pi_offset <- predict_pi[rownames(filtered_mat)[g]]
     tmp.df<-data.frame(y=gene,norm_sf=norm_factor,predict_pi_offset=predict_pi_offset,ind_zero=1*(gene==0),group=group,sub=as.numeric(factor(subject)))
@@ -88,27 +122,62 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
       tmp.df[, covariates] <- meta[, covariates]
     }
 
-    # Create formula for the model
+    # Create formulas for the model
     fixed_effects <- c("group", covariates)
     fixed_formula <- as.formula(paste("y ~", paste(fixed_effects, collapse = " + "), "+ offset(log(norm_sf)) + (1 | sub)"))
     zi_formula <- ~ offset(predict_pi_offset) - 1 + ind_zero + (1 | sub)
 
-    f1<-try(glmmTMB::glmmTMB(formula = fixed_formula, data = tmp.df, family = glmmTMB::nbinom2, ziformula = zi_formula))
+    f1 <- tryCatch(
+      {
+        suppressWarnings(
+          suppressMessages(
+            glmmTMB::glmmTMB(
+              formula = fixed_formula,
+              data = tmp.df,
+              family = glmmTMB::nbinom2,
+              ziformula = zi_formula
+            )
+          )
+        )
+      },
+      error = function(e) {
+        message(paste0("Model convergence failed for gene: ", gene_name))
+        return(NULL)
+      }
+    )
 
-    res1<-try(c(summary(f1)$coefficients$cond[,"Estimate"],1/summary(f1)$sigma,exp(f1$fit$par["theta"])^2,exp(f1$fit$par["thetazi"])^2,
-                summary(f1)$coefficients$zi[1,"Estimate"],summary(f1)$coefficients$cond[-1,"Pr(>|z|)"],summary(f1)$AICtab["deviance"]))
-    if('try-error' %in% class(res1)){
-      res1<-c(Alpha=NA)
-    }else{
-      names(res1)<-c("Alpha",paste0("Beta_",names(summary(f1)$coefficients$cond[,"Estimate"])[-1]), "Dispersion","Sigma2","Sigma2_ZI","Theta",
-                     paste0("Pval_Beta_",names(summary(f1)$coefficients$cond[,"Estimate"])[-1]),"Deviance")
-
+    # Check convergence
+    if (is.null(f1)) {
+      dummy_model <- lm(fixed_formula, data = tmp.df) # dummy model to get names
+      est_names <- names(coef(dummy_model))[-1]
+      all_names <- c(
+        "Alpha",
+        paste0("Beta_", est_names),
+        "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
+        paste0("Pval_Beta_", est_names),
+        "Deviance"
+      )
+      res1 <- setNames(rep(NA, length(expected_colnames)), expected_colnames)
+    } else {
+      # If model fit successful, extract values
+      est <- summary(f1)$coefficients$cond[, "Estimate"]
+      pval <- summary(f1)$coefficients$cond[-1, "Pr(>|z|)"]
+      if (is.null(pval)) {
+        pval_names <- names(est)[-1]
+        pval <- setNames(rep(NA, length(pval_names)), pval_names)
+      }
+      res1 <- c(est, 1 / summary(f1)$sigma, exp(f1$fit$par["theta"])^2, exp(f1$fit$par["thetazi"])^2,
+                summary(f1)$coefficients$zi[1, "Estimate"], pval, summary(f1)$AICtab["deviance"])
+      names(res1) <- c("Alpha",
+                       paste0("Beta_", names(est)[-1]),
+                       "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
+                       paste0("Pval_Beta_", names(pval)),
+                       "Deviance")
     }
 
     data.frame(t(res1))
   },mc.cores=cores))
   rownames(res_tb)<-rownames(filtered_mat)
-  res_tb<-res_tb[which(!is.na(res_tb[,1])&!is.na(res_tb[,2])&!is.na(res_tb[,7])),]
   return(list(
     model_results = res_tb,
     problematic_genes_cells_expressed = problematic_genes_expressed,
