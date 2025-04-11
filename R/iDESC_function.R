@@ -58,6 +58,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     tapply(gene_values > 0, group, sum)
   })
   gene_group_expressed_df <- as.data.frame(t(gene_group_expressed))
+  gene_group_expressed_df <- gene_group_expressed_df[, colSums(!is.na(gene_group_expressed_df)) > 0]
   colnames(gene_group_expressed_df) <- levels(factor(group))
 
   # Total cells per group (only once)
