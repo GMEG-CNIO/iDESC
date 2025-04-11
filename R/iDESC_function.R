@@ -167,12 +167,13 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
                       paste0("Pval_Beta_", names(pval)),
                       "Deviance")
 
-    df <- data.frame(t(res1))
-    rownames(df) <- gene_name
+    df <- data.frame(Gene = gene_name, t(res1), stringsAsFactors = FALSE)
     return(df)
   },mc.cores=cores)
 
   res_tb <- plyr::rbind.fill(res_tb)
+  rownames(res_tb) <- res_tb$Gene
+  res_tb$Gene <- NULL
 
   # Add convergence-failure genes to the problematic table
   if (length(convergence_failed_genes) > 0) {
