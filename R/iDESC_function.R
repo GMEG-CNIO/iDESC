@@ -22,7 +22,7 @@
 #'
 #' @return A list containing:
 #' \itemize{
-#'   \item{\strong{model_results}: A data frame containing the results of the differential expression analysis. For each gene, this includes estimated effect sizes (coefficients), dispersion parameters, zero-inflation estimates, statistical significance (p-values), and model deviances.}
+#'   \item{\strong{model_results}: A data frame containing the results of the differential expression analysis. For each gene, this includes estimated effect sizes (coefficients), dispersion parameters, zero-inflation estimates, statistical significance (raw p-values and FDR-corrected p-values), and model deviances.}
 #'   \item{\strong{problematic_genes}: A data frame listing genes that were excluded from the main analysis because they were expressed in cells from only one group. For each gene, the table reports the number of cells with non-zero expression in each group. This can be used for further diagnostic or exploratory analyses, such as assessing group-specific expression patterns.}
 #' }
 #' @export
@@ -62,6 +62,9 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   colnames(gene_group_expressed_df) <- levels(factor(group))
 
   # Total cells per group (only once)
+  if (!is.factor(group)) {
+    group <- factor(group)
+  }
   group_clean <- droplevels(group)
   total_cells_per_group <- as.data.frame(as.list(table(group_clean)))
   rownames(total_cells_per_group) <- "Total_cells"
@@ -165,7 +168,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     names(res1) <- c("Alpha",
                       paste0("Beta_", names(est)[-1]),
                       "Dispersion", "Sigma2", "Sigma2_ZI", "Theta",
-                      paste0("Pval_Beta_", names(pval)),
+                      paste0("Pval_Beta_", names(est)[-1]),
                       "Deviance")
 
     df <- data.frame(Gene = gene_name, t(res1), stringsAsFactors = FALSE)
@@ -202,6 +205,24 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     problematic_combined <- problematic_combined[order(problematic_combined$Gene), ]
     problematic_combined <- problematic_combined[, !(colnames(problematic_combined) %in% "Gene")]
   }
+
+  # FDR correction
+  pval_cols <- grep("^Pval_Beta_", colnames(res_tb), value = TRUE)
+  for (pval_col in pval_cols) {
+    fdr_col <- sub("^Pval_", "FDR_", pval_col)
+    res_tb[[fdr_col]] <- p.adjust(res_tb[[pval_col]], method = "BH")
+  }
+
+  # Order FDR columns
+  ordered_cols <- unlist(lapply(pval_cols, function(pval_col) {
+    fdr_col <- sub("^Pval_", "FDR_", pval_col)
+    c(pval_col, fdr_col)
+  }))
+  final_col_order <- c(
+    setdiff(colnames(res_tb), c(ordered_cols, "Deviance")),
+    ordered_cols,
+    "Deviance"
+  )
 
   return(list(
     model_results = res_tb,

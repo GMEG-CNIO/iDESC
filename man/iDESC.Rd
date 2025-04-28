@@ -16,6 +16,8 @@ iDESC(
   gene_cell_filtering = 0.05,
   ncell_filtering = 1,
   span = 0.05,
+  loess_control = "",
+  covariates = NULL,
   cores = 1
 )
 }
@@ -42,10 +44,23 @@ iDESC(
 
 \item{span}{smoothing parameter for LOESS curve}
 
+\item{loess_control}{Optional. If set to "control", the LOESS smoothing function will use
+\code{loess.control(surface = "direct")}. This setting is recommended when working with sparse or
+zero-heavy datasets, where the default LOESS method may struggle to define neighborhoods for
+smoothing. Using "direct" computation ensures more stable and accurate smoothing but may be
+slower. Activate this option if you encounter warnings like "k-d tree limited by memory" or
+if the LOESS fit appears unstable.}
+
+\item{covariates}{Optional. A vector of covariates to include in the model.}
+
 \item{cores}{Number of cores for parallel processing (default is 1)}
 }
 \value{
-A result table contains parameter estimation
+A list containing:
+\itemize{
+\item{\strong{model_results}: A data frame containing the results of the differential expression analysis. For each gene, this includes estimated effect sizes (coefficients), dispersion parameters, zero-inflation estimates, statistical significance (raw p-values and FDR-corrected p-values), and model deviances.}
+\item{\strong{problematic_genes}: A data frame listing genes that were excluded from the main analysis because they were expressed in cells from only one group. For each gene, the table reports the number of cells with non-zero expression in each group. This can be used for further diagnostic or exploratory analyses, such as assessing group-specific expression patterns.}
+}
 }
 \description{
 iDESC: main function for DE analysis using zero-inflated negative binomial mixed model
