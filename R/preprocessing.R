@@ -53,5 +53,15 @@ preprocessing<-function(mat,meta,subject_var,group_var,sub_cell_filtering,gene_s
   remain_gene<-rownames(mat)[which(rowSums(sapply(group_sub_list,function(sub_list){
     rowSums(sub_prop[,as.character(sub_list)]>=gene_cell_filtering,na.rm=T)>=(gene_sub_filtering*length(sub_list))
   }))>0)]
-  return(list(mat=mat[remain_gene,remain_cell],meta=meta))
+
+  # filter cells by number of expressed genes (ncell_filtering)
+  mat_filtered <- mat[remain_gene, remain_cell]
+  n_genes_per_cell <- Matrix::colSums(mat_filtered != 0)
+  final_cells <- names(n_genes_per_cell[n_genes_per_cell >= ncell_filtering])
+
+  # Subset matrix and metadata to keep only those cells
+  mat_filtered <- mat_filtered[, final_cells]
+  meta_filtered <- meta[final_cells, ]
+
+  return(list(mat = mat_filtered, meta = meta_filtered))
 }
