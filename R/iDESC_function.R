@@ -40,20 +40,20 @@
 
 iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor","User","None"),user_sf=NULL,
                 sub_cell_filtering=5,gene_sub_filtering=0,gene_cell_filtering=0.05,ncell_filtering=1,span=0.05,loess_control="",
-                covariates=NULL,cores=1, use_ind_zero=TRUE){
+                use_ind_zero=TRUE,covariates=NULL,cores=1){
                 
   if(!is.null(user_sf)){
     if(is.null(names(user_sf))){names(user_sf)<-colnames(mat)}else{user_sf<-user_sf[colnames(mat)]}
   }
     
-  dat<-preprocessing(counts,meta,subject_var,group_var,sub_cell_filtering=5,gene_sub_filtering=0,gene_cell_filtering=0.05,ncell_filtering=1)
+  dat<-preprocessing(mat,meta,subject_var,group_var,sub_cell_filtering=sub_cell_filtering,gene_sub_filtering=gene_sub_filtering,gene_cell_filtering=gene_cell_filtering,ncell_filtering=ncell_filtering)
   mat<-dat$mat
   meta<-dat$meta
-  norm_factor<-normalization_factors(mat,norm_opt,user_sf="SizeFactor")
+  norm_factor<-normalization_factors(mat,norm_opt,user_sf)
   group<-meta[,group_var]
   subject<-meta[,subject_var]
   
-  predict_pi<-zp_prediction(mat,norm_factor,span=0.05,loess_control="")
+  predict_pi<-zp_prediction(mat,norm_factor,span,loess_control)
   stopifnot("LOESS: zero-width neighborhood. make span bigger"=sum(is.na(predict_pi))==0)
   
   # Summary of expressed cells
@@ -149,7 +149,7 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
     if (is.null(f1)) {
       fail_row <- data.frame(Gene = gene_name, Status = "model_crash", stringsAsFactors = FALSE)
       fail_row[expected_colnames] <- NaN
-      return(return_fail("model_crash"))
+      return(fail_row)
     } else {
       status <- "OK"
     }
@@ -221,9 +221,21 @@ iDESC<-function(mat,meta,subject_var,group_var,norm_opt=c("SeqDepth","SizeFactor
   )
   
   res_tb <- res_tb[, final_col_order]
+  
+  # Create problematic genes table
+  problematic_genes <- rownames(res_tb)[res_tb$Status != "OK"]
 
+  if (length(problematic_genes) > 0) {
+    problematic_genes_expressed <- gene_group_expressed_df[problematic_genes, , drop = FALSE]
+    problematic_genes_expressed$Reason <- res_tb[problematic_genes, "Status"]
+    problematic_genes_expressed <-  problematic_genes_expressed[order(rownames(problematic_genes_expressed)), ]
+  } else {
+    problematic_genes_expressed <- NULL
+  }
+  
   return(list(
     model_results = res_tb,
+    problematic_genes_cells_expressed = problematic_genes_expressed,
     total_cells = total_cells_per_group
   ))
 }
